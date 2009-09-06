@@ -169,7 +169,7 @@ module Jekyll
       base = File.join(self.source, dir)
       entries = filter_entries(Dir.entries(base))
       directories = entries.select { |e| File.directory?(File.join(base, e)) }
-      files = entries.reject { |e| File.directory?(File.join(base, e)) || File.symlink?(File.join(base, e)) }
+      files = entries.reject { |e| File.directory?(File.join(base, e)) }
 
       # we need to make sure to process _posts *first* otherwise they
       # might not be available yet to other templates as {{ site.posts }}
