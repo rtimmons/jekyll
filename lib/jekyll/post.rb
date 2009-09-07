@@ -68,6 +68,9 @@ module Jekyll
           end
         end
       end
+      
+      @mtime = File.mtime(File.join(@base, name))
+      self.data['mtime'] = @mtime
     end
 
     # Spaceship is based on Post#date, slug

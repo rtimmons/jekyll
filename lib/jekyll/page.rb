@@ -22,6 +22,9 @@ module Jekyll
 
       self.process(name)
       self.read_yaml(File.join(base, dir), name)
+
+      @mtime = File.mtime(File.join(base, dir, name))
+      self.data['mtime'] = @mtime
     end
 
     # The generated directory into which the page will be placed
