@@ -135,7 +135,7 @@ module Jekyll
         "year"       => date.strftime("%Y"),
         "month"      => date.strftime("%m"),
         "day"        => date.strftime("%d"),
-        "title"      => CGI.escape(slug),
+        "title"      => CGI.escape(slug.downcase),
         "categories" => categories.sort.join('/')
       }.inject(template) { |result, token|
         result.gsub(/:#{token.first}/, token.last)

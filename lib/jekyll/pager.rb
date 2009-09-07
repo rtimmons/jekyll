@@ -3,9 +3,7 @@ module Jekyll
     attr_reader :page, :per_page, :posts, :total_posts, :total_pages, :previous_page, :next_page
     
     def self.calculate_pages(all_posts, per_page)
-      num_pages = all_posts.size / per_page.to_i
-      num_pages.abs + 1 if all_posts.size % per_page.to_i != 0
-      num_pages
+      (all_posts.size.to_f / per_page.to_f).ceil
     end
     
     def self.pagination_enabled?(config, file)
