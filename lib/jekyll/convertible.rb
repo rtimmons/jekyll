@@ -49,7 +49,7 @@ module Jekyll
       case self.ext[1..-1]
       when /textile/i
         return 'textile'
-      when /markdown/i, /mkdn/i, /md/i
+      when /markdown/i, /mkdn/i, /md/i, /txt/i
         return 'markdown'
       end
       return 'unknown'
