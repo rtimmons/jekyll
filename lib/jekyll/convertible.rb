@@ -39,6 +39,12 @@ module Jekyll
         self.ext = ".html"
         self.content = self.site.markdown(self.content)
       end
+      self.handle_hiddens
+    end
+    
+    def handle_hiddens
+      self.content.gsub!( /<p>\{hidden(.*)\}\s*<\/p>/, "<div class=\"hidden\" title=\"$1\">" )
+      self.content.gsub!( /<p>\{\/hidden\}\s*<\/p>$/, "</div>" )
     end
 
     # Determine which formatting engine to use based on this convertible's
@@ -61,6 +67,7 @@ module Jekyll
     #
     # Returns nothing
     def do_layout(payload, layouts)
+      puts "Doing layout for #{self.data.inspect}"
       info = { :filters => [Jekyll::Filters], :registers => { :site => self.site } }
 
       # render and transform content (this becomes the final content of the object)
