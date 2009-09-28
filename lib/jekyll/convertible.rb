@@ -31,6 +31,14 @@ module Jekyll
     #
     # Returns nothing
     def transform
+      (@pre_filters || []).each do |filter|
+        f = filter.to_sym
+        if self.respond_to? f
+          p "Running pre filter #{f.to_s}"
+          self.send f
+        end
+      end
+      
       case self.content_type
       when 'textile'
         self.ext = ".html"
@@ -39,11 +47,25 @@ module Jekyll
         self.ext = ".html"
         self.content = self.site.markdown(self.content)
       end
-      self.handle_hiddens
+      
+      (@post_filters || [] ).each do |filter|
+        f = filter.to_sym
+        if self.respond_to? f
+          p "Running post filter #{f.to_s}"
+          self.send f
+        end
+      end
+          
     end
     
+    # Converts "hidden" elements in self.content.
+    # 
+    #  '<p>{hidden foo}</p>' => '<div class="hidden" title="foo">'
+    #  '<p>{/hidden}</p>' => '</div>'
+    #
+    # Returns nothing
     def handle_hiddens
-      self.content.gsub!( /<p>\{hidden(.*)\}\s*<\/p>/, "<div class=\"hidden\" title=\"$1\">" )
+      self.content.gsub!( /<p>\{hidden(.*)\}\s*<\/p>/, "<div class=\"hidden\" title=\"\1\">" )
       self.content.gsub!( /<p>\{\/hidden\}\s*<\/p>$/, "</div>" )
     end
 

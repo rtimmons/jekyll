@@ -19,6 +19,8 @@ module Jekyll
       @base = base
       @dir  = dir
       @name = name
+      
+      @post_filters = [ :handle_hiddens ]
 
       self.process(name)
       self.read_yaml(File.join(base, dir), name)
