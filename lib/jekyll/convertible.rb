@@ -65,7 +65,7 @@ module Jekyll
     #
     # Returns nothing
     def handle_hiddens
-      self.content.gsub!( /<p>\{hidden(.*)\}\s*<\/p>/, "<div class=\"hidden\" title=\"\1\">" )
+      self.content.gsub!( /<p>\{hidden(.*)\}\s*<\/p>/, "<div class=\"showhide\" title=\"\1\">" )
       self.content.gsub!( /<p>\{\/hidden\}\s*<\/p>$/, "</div>" )
     end
 
