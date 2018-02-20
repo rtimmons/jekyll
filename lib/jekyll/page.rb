@@ -1,117 +1,187 @@
-module Jekyll
+# frozen_string_literal: true
 
+module Jekyll
   class Page
     include Convertible
 
-    attr_accessor :site
+    attr_writer :dir
+    attr_accessor :site, :pager
     attr_accessor :name, :ext, :basename
     attr_accessor :data, :content, :output
 
+    alias_method :extname, :ext
+
+    FORWARD_SLASH = "/".freeze
+
+    # Attributes for Liquid templates
+    ATTRIBUTES_FOR_LIQUID = %w(
+      content
+      dir
+      name
+      path
+      url
+    ).freeze
+
+    # A set of extensions that are considered HTML or HTML-like so we
+    # should not alter them,  this includes .xhtml through XHTM5.
+
+    HTML_EXTENSIONS = %w(
+      .html
+      .xhtml
+      .htm
+    ).freeze
+
     # Initialize a new Page.
-    #   +site+ is the Site
-    #   +base+ is the String path to the <source>
-    #   +dir+ is the String path between <source> and the file
-    #   +name+ is the String filename of the file
     #
-    # Returns <Page>
+    # site - The Site object.
+    # base - The String path to the source.
+    # dir  - The String path between the source and the file.
+    # name - The String filename of the file.
     def initialize(site, base, dir, name)
       @site = site
       @base = base
       @dir  = dir
       @name = name
-      
-      @post_filters = [ :handle_hiddens ]
+      @path = if site.in_theme_dir(base) == base # we're in a theme
+                site.in_theme_dir(base, dir, name)
+              else
+                site.in_source_dir(base, dir, name)
+              end
 
-      self.process(name)
-      self.read_yaml(File.join(base, dir), name)
+      process(name)
+      read_yaml(File.join(base, dir), name)
 
-      @mtime = File.mtime(File.join(base, dir, name))
-      self.data['mtime'] = @mtime
+      data.default_proc = proc do |_, key|
+        site.frontmatter_defaults.find(File.join(dir, name), type, key)
+      end
+
+      Jekyll::Hooks.trigger :pages, :post_init, self
     end
 
     # The generated directory into which the page will be placed
     # upon generation. This is derived from the permalink or, if
-    # permalink is absent, set to '/'
+    # permalink is absent, will be '/'
     #
-    # Returns <String>
+    # Returns the String destination directory.
     def dir
-      url[-1, 1] == '/' ? url : File.dirname(url)
-    end
-
-    # The full path and filename of the post.
-    # Defined in the YAML of the post body
-    # (Optional)
-    #
-    # Returns <String>
-    def permalink
-      self.data && self.data['permalink']
-    end
-
-    def template
-      if self.site.permalink_style == :pretty && !index?
-        "/:name/"
+      if url.end_with?(FORWARD_SLASH)
+        url
       else
-        "/:name.html"
+        url_dir = File.dirname(url)
+        url_dir.end_with?(FORWARD_SLASH) ? url_dir : "#{url_dir}/"
       end
     end
 
-    # The generated relative url of this page
-    # e.g. /about.html
+    # The full path and filename of the post. Defined in the YAML of the post
+    # body.
     #
-    # Returns <String>
-    def url
-      return permalink if permalink
-
-      @url ||= (ext == '.html') ? template.gsub(':name', basename) : "/#{name}"
+    # Returns the String permalink or nil if none has been set.
+    def permalink
+      data.nil? ? nil : data["permalink"]
     end
 
-    # Extract information from the page filename
-    #   +name+ is the String filename of the page file
+    # The template of the permalink.
     #
-    # Returns nothing
+    # Returns the template String.
+    def template
+      if !html?
+        "/:path/:basename:output_ext"
+      elsif index?
+        "/:path/"
+      else
+        Utils.add_permalink_suffix("/:path/:basename", site.permalink_style)
+      end
+    end
+
+    # The generated relative url of this page. e.g. /about.html.
+    #
+    # Returns the String url.
+    def url
+      @url ||= URL.new({
+        :template     => template,
+        :placeholders => url_placeholders,
+        :permalink    => permalink,
+      }).to_s
+    end
+
+    # Returns a hash of URL placeholder names (as symbols) mapping to the
+    # desired placeholder replacements. For details see "url.rb"
+    def url_placeholders
+      {
+        :path       => @dir,
+        :basename   => basename,
+        :output_ext => output_ext,
+      }
+    end
+
+    # Extract information from the page filename.
+    #
+    # name - The String filename of the page file.
+    #
+    # Returns nothing.
     def process(name)
       self.ext = File.extname(name)
-      self.basename = name.split('.')[0..-2].first
+      self.basename = name[0..-ext.length - 1]
     end
 
     # Add any necessary layouts to this post
-    #   +layouts+ is a Hash of {"name" => "layout"}
-    #   +site_payload+ is the site payload hash
     #
-    # Returns nothing
+    # layouts      - The Hash of {"name" => "layout"}.
+    # site_payload - The site payload Hash.
+    #
+    # Returns String rendered page.
     def render(layouts, site_payload)
-      payload = {"page" => self.data}.deep_merge(site_payload)
-      do_layout(payload, layouts)
+      site_payload["page"] = to_liquid
+      site_payload["paginator"] = pager.to_liquid
+
+      do_layout(site_payload, layouts)
     end
 
-    # Write the generated page file to the destination directory.
-    #   +dest_prefix+ is the String path to the destination dir
-    #   +dest_suffix+ is a suffix path to the destination dir
+    # The path to the source file
     #
-    # Returns nothing
-    def write(dest_prefix, dest_suffix = nil)
-      dest = File.join(dest_prefix, @dir)
-      dest = File.join(dest, dest_suffix) if dest_suffix
-      FileUtils.mkdir_p(dest)
-
-      # The url needs to be unescaped in order to preserve the correct filename
-      path = File.join(dest, CGI.unescape(self.url))
-      if self.ext == '.html' && self.url[/\.html$/].nil?
-        FileUtils.mkdir_p(path)
-        path = File.join(path, "index.html")
-      end
-
-      File.open(path, 'w') do |f|
-        f.write(self.output)
-      end
+    # Returns the path to the source file
+    def path
+      data.fetch("path") { relative_path }
     end
 
-    private
+    # The path to the page source file, relative to the site source
+    def relative_path
+      File.join(*[@dir, @name].map(&:to_s).reject(&:empty?)).sub(%r!\A\/!, "")
+    end
 
-      def index?
-        basename == 'index'
-      end
+    # Obtain destination path.
+    #
+    # dest - The String path to the destination dir.
+    #
+    # Returns the destination file path String.
+    def destination(dest)
+      path = site.in_dest_dir(dest, URL.unescape_path(url))
+      path = File.join(path, "index") if url.end_with?("/")
+      path << output_ext unless path.end_with? output_ext
+      path
+    end
 
+    # Returns the object as a debug String.
+    def inspect
+      "#<Jekyll::Page @name=#{name.inspect}>"
+    end
+
+    # Returns the Boolean of whether this Page is HTML or not.
+    def html?
+      HTML_EXTENSIONS.include?(output_ext)
+    end
+
+    # Returns the Boolean of whether this Page is an index file or not.
+    def index?
+      basename == "index"
+    end
+
+    def trigger_hooks(hook_name, *args)
+      Jekyll::Hooks.trigger :pages, hook_name, self, *args
+    end
+
+    def write?
+      true
+    end
   end
-
 end
